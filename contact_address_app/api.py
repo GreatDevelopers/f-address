@@ -3,58 +3,42 @@ import requests
 
 @frappe.whitelist()
 def get_address_from_coordinates(lat, lon):
-    try:
-        headers = {
-            "User-Agent": "contact_address_app (sukh.singhlotey@gmail.com)"
-        }
+    """Fetch detailed address from OpenStreetMap using latitude & longitude"""
+    url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}"
 
-        response = requests.get(
-            f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}",
-            headers=headers
-        )
+    headers = {
+        "User-Agent": "contact_address_app/1.0 (sukh.singhlotey@gmail.com)",
+        "Accept-Language": "en"
+    }
+
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+
+        if response.status_code == 403:
+            frappe.throw("Error: OpenStreetMap API returned 403 Forbidden. Check your network or User-Agent header.")
 
         if response.status_code != 200:
-            frappe.throw(f"Failed to fetch address. Status Code: {response.status_code}")
+            frappe.throw(f"Error: Received {response.status_code} from OpenStreetMap API")
 
         data = response.json()
+        if "address" in data:
+            address_data = data["address"]
 
-        if "address" not in data:
-            frappe.throw("Address data not found in response.")
+            return {
+                "road": address_data.get("road", ""),
+                "suburb": address_data.get("suburb", ""),
+                "city": address_data.get("city", ""),
+                "state": address_data.get("state", ""),
+                "county": address_data.get("county", ""),
+                "country": address_data.get("country", ""),
+                "pincode": address_data.get("postcode", ""),
+                "country_code": address_data.get("country_code", ""),
+            }
+        else:
+            frappe.throw("Error: Address details not found in API response")
 
-        address_data = data["address"]
+    except requests.exceptions.RequestException as e:
+        frappe.throw(f"Network Error: {str(e)}")
 
-        road = address_data.get("road", "")[:140] 
-        suburb = address_data.get("suburb", "")[:140]
-        city_district = address_data.get("city_district", "")[:140]
-        city = address_data.get("city", "")[:140]
-        state = address_data.get("state", "")[:140]
-        county = address_data.get("ISO3166-2-lvl4", "")[:140]
-        pincode = address_data.get("postcode", "")[:140]
-        country = address_data.get("country", "")[:140]
-
-        full_address = f"{road}, {suburb}, {city_district}, {city}, {state}, {pincode}, {country}".strip(", ")
-
-        frappe.log_error(f"Fetched Address Data: {address_data}", "get_address_from_coordinates")
-        frappe.log_error(f"Formatted Address: {full_address}", "get_address_from_coordinates")
-
-        address_doc = frappe.get_doc({
-            "doctype": "Address",
-            "address_line1": full_address,  
-            "address_line2": city_district,
-            "city": city,
-            "county": county,
-            "state": state,
-            "country": country,
-            "pincode": pincode,
-            "email_id": "sukh.singhlotey@gmail.com",
-            "phone": "",
-            "fax": "",
-        })
-
-        address_doc.insert(ignore_permissions=True) 
-
-        return {"status": "success", "message": "Address saved successfully!"}
-
-    except Exception as e:
-        frappe.log_error(f"Error saving address: {str(e)}", "get_address_from_coordinates")
-        return {"status": "error", "message": str(e)}
+    except requests.exceptions.JSONDecodeError:
+        frappe.throw("Error: Unable to parse JSON from OpenStreetMap API")
