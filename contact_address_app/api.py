@@ -1,9 +1,11 @@
 import frappe
 import requests
+from openlocationcode import openlocationcode as olc  # Import the library
 
 @frappe.whitelist()
 def get_address_from_coordinates(lat, lon):
-    """Fetch detailed address from OpenStreetMap using latitude & longitude"""
+    """Fetch detailed address from OpenStreetMap and generate Google Plus Code using latitude & longitude"""
+    # Existing OpenStreetMap API call
     url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}"
 
     headers = {
@@ -21,21 +23,23 @@ def get_address_from_coordinates(lat, lon):
             frappe.throw(f"Error: Received {response.status_code} from OpenStreetMap API")
 
         data = response.json()
-        if "address" in data:
-            address_data = data["address"]
+        address_data = data.get("address", {})
 
-            return {
-                "road": address_data.get("road", ""),
-                "suburb": address_data.get("suburb", ""),
-                "city": address_data.get("city", ""),
-                "state": address_data.get("state", ""),
-                "county": address_data.get("county", ""),
-                "country": address_data.get("country", ""),
-                "pincode": address_data.get("postcode", ""),
-                "country_code": address_data.get("country_code", ""),
-            }
-        else:
-            frappe.throw("Error: Address details not found in API response")
+        # Generate Google Plus Code from coordinates
+        plus_code = olc.encode(float(lat), float(lon))  # Convert lat/lon to float and generate Plus Code
+
+        # Return address data plus the new Plus Code
+        return {
+            "road": address_data.get("road", ""),
+            "suburb": address_data.get("suburb", ""),
+            "city": address_data.get("city", ""),
+            "state": address_data.get("state", ""),
+            "county": address_data.get("county", ""),
+            "country": address_data.get("country", ""),
+            "pincode": address_data.get("postcode", ""),
+            "country_code": address_data.get("country_code", ""),
+            "plus_code": plus_code  # Add the Plus Code to the response
+        }
 
     except requests.exceptions.RequestException as e:
         frappe.throw(f"Network Error: {str(e)}")
