@@ -243,3 +243,6 @@ app_license = "mit"
 # }
 
 
+fixtures = [
+    "Client Script"
+]
